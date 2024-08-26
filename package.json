@@ -1,0 +1,24 @@
+{
+  "name": "slack-only-once",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "npx tsc",
+    "biome": "npx @biomejs/biome check --write ./src"
+  },
+  "author": "Vic",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "@slack/bolt": "^3.21.1",
+    "dotenv": "^16.4.5",
+    "sequelize": "^6.37.3",
+    "sqlite3": "^5.1.7",
+    "typescript": "^5.5.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.8.3",
+    "@types/node": "^22.5.0"
+  },
+  "type": "module"
+}
