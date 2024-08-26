@@ -4,7 +4,9 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "npx tsc",
-    "biome": "npx @biomejs/biome check --write ./src"
+    "biome": "npx @biomejs/biome check --write ./src",
+    "start": "node dist/index.js",
+    "bot": "npx tsc && node dist/index.js"
   },
   "author": "Vic",
   "license": "MIT",
