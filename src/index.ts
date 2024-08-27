@@ -1,12 +1,10 @@
 import Slack, {} from "@slack/bolt";
 const { App, subtype } = Slack;
 import SlackOauth from "@slack/oauth";
-const { FileInstallationStore } = SlackOauth;
 
 import { config } from "dotenv";
 import { Sequelize } from "sequelize";
 import { Models } from "./db/db.js";
-import { constrainedMemory } from "process";
 config();
 
 const { SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SLACK_APP_TOKEN,SLACK_CLIENT_SECRET } = process.env;
@@ -18,7 +16,7 @@ const sequelize = new Sequelize({
 	dialect: "sqlite",
 	storage: "db.sqlite",
 });
-const { User } = await Models(sequelize);
+const { User, Message } = await Models(sequelize);
 
 const slack = new App({
 	token: SLACK_BOT_TOKEN,
@@ -113,13 +111,13 @@ slack.event("member_joined_channel", async({client,body,})=>{
 
 
 
-slack.message("debug_channel_join", async({client,body,message})=>{
-	console.log("Recieved [DEBUG] member_joined_channel event",body);
+slack.message("debug_channel_join", async({client,body,message,say})=>{
 	if(message.subtype)return
+	console.log("Recieved [DEBUG] member_joined_channel message",message);
 
 
 	if (body.channel_id !== ONLY_ONCE_PORTAL) return;
-	const user = body.user_id;
+	const user = message.user;
 	const invite_message = {
 		"text":"Welcome to the Only Once portal. Please read this on the slack client.",
 		"blocks": [
@@ -189,12 +187,34 @@ slack.message("debug_channel_join", async({client,body,message})=>{
 		]
 	}
 	
-	client.chat.postMessage({
-		channel: body.channel,
-		...invite_message
+	await client.chat.postMessage({
+		channel: ONLY_ONCE_PORTAL,
+		blocks: invite_message.blocks,
+		text: invite_message.text
 	})
 })
 
+slack.action("joinonlyonce", async({client,body,ack})=>{
+	const user = body.user.id;
+
+	const u = await User.findOne({where:{id:user}});
+	if (!u){
+
+		await client.chat.postEphemeral({
+			text:"You already have access to the Only Once channel or have been banned!!",
+			channel: ONLY_ONCE_PORTAL,
+			user: user
+		})
+	}
+
+	await User.create({id:user,banned:false,messageCount:0});
+
+	await client.chat.postMessage({
+		text:"There you go, youre being added to the Only Once channel",
+		channel: ONLY_ONCE_PORTAL
+	})
+
+})
 
 slack.command("/ooinvite", async ({ ack, body, client,respond }) => {
 	await ack();
@@ -208,21 +228,23 @@ slack.command("/ooinvite", async ({ ack, body, client,respond }) => {
 	respond(`Inviting ${parsedUser.name}`);
 
 	let i = await client.conversations.invite({
-		channel: body.channel_id,
+		channel: ONLY_ONCE_CHANNEL,
 		users: parsedUser.id
 	})
 	if (i.ok) {
 		client.chat.postMessage({
-			channel: body.channel_id,
+			channel: ONLY_ONCE_CHANNEL,
 			text: `Invited ${parsedUser.name}`
 		})
 	} else {
 		client.chat.postMessage({
-			channel: body.channel_id,
+			channel: ONLY_ONCE_CHANNEL,
 			text: `Failed to invite ${parsedUser.name}`
 		})
 	}
 });
+
+
 
 slack.command("/oorm", async ({ ack, body, client,respond }) => {
 	await ack();
@@ -234,20 +256,53 @@ slack.command("/oorm", async ({ ack, body, client,respond }) => {
 	};
 	respond(`Removing ${parsedUser.name}`);
 	let i = await client.conversations.kick({
-		channel: body.channel_id,
+		channel: ONLY_ONCE_CHANNEL,
 		user: parsedUser.id
 	})
 	if (i.ok) {
 		client.chat.postMessage({
-			channel: body.channel_id,
+			channel: ONLY_ONCE_CHANNEL,
 			text: `Removed ${parsedUser.name}`
 		})
 	} else {
 		client.chat.postMessage({
-			channel: body.channel_id,
+			channel: ONLY_ONCE_CHANNEL,
 			text: `Failed to remove ${parsedUser.name}`
 		})
 	}
+})
+
+
+slack.message(async ({ message, client }) => {
+	if (message.subtype) return;
+	if(message.channel !== ONLY_ONCE_CHANNEL) return;
+
+	const possibleMessage = await Message.findOne({where:{content:message.text}});
+
+	if (!possibleMessage){
+		await Message.create({ts:message.ts,userId:message.user,content:message.text});
+	}
+
+	const { user, text, channel } = message;
+	if (!text) return;
+
+	if(text.length > 300){
+		client.chat.postMessage({
+			channel: ONLY_ONCE_CHANNEL,
+			text: `${user} has been banned for exceeding the 300 character limit!!! Good Game.`,
+			thread_ts: message.ts
+		})
+
+		client.chat.postMessage({
+			channel: user,
+			text: `You have been banned from the Only Once channel for exceeding the 300 character limit. Good Game.`,
+		})
+
+		await banUser(user);
+		return;
+	}
+
+
 })
 
 interface ParsedSlackUser {
@@ -260,6 +315,18 @@ function parseUser(user:String /* <@ID|username>*/): ParsedSlackUser | null {
 	const name = user.match(/\|(.+?)>/)?.[1];
 	if (!id || !name) return null;
 	return { id, name };
+}
+
+async function banUser(user:string):Promise<boolean> {
+	const u = await User.findOne({where:{id:user}});
+	if (!u) return false;
+	await u.update({banned:true});
+
+	await slack.client.conversations.kick({
+		channel: ONLY_ONCE_CHANNEL,
+		user: user
+	})
+	return true;
 }
 
 await slack.start();

@@ -6,9 +6,15 @@ class User extends Model {
 	declare messageCount: number;
 }
 
+class Message extends Model {
+	declare ts: string;
+	declare userId: string;
+	declare content: string;
+}
+
 export async function Models(
 	sequelize: Sequelize,
-): Promise<{ User: typeof User }> {
+): Promise<{ User: typeof User, Message: typeof Message }> {
 	try {
 		await sequelize.authenticate();
 		console.log("Connection has been established successfully.");
@@ -41,7 +47,30 @@ export async function Models(
 		},
 	);
 
+	Message.init(
+		{
+			ts: {
+				type: DataTypes.STRING,
+				primaryKey: true,
+				allowNull: false,
+			},
+			userId: {
+				type: DataTypes.STRING,
+				allowNull: false,
+			},
+			content: {
+				type: DataTypes.STRING,
+				allowNull: false,
+			},
+		},
+		{
+			sequelize,
+			modelName: "Message",
+			timestamps: true,
+		},
+	);
+
 	await sequelize.sync();
 
-	return { User };
+	return { User, Message };
 }
