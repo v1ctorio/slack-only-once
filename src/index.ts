@@ -13,6 +13,7 @@ const ONLY_ONCE_META = "C07JQF74HQT";
 const ONLY_ONCE_CHANNEL = "C07K5SSA908";
 const ONLY_ONCE_PORTAL = "C07JGDNQ91U";
 
+const OO_ADMIN = "U072PTA5BNG";
 
 const sequelize = new Sequelize({
 	dialect: "sqlite",
@@ -32,11 +33,11 @@ const slack = new App({
 
 slack.event("member_joined_channel", async({client,body,say})=>{
 
-	
-	if (body.channel !== ONLY_ONCE_PORTAL) return;
-	console.log("Recieved member_joined_channel event",body);
-	const {user} = body;
+	console.log("New member joined",body);
 
+
+	if (body.channel !== ONLY_ONCE_PORTAL) return;
+	const user = body.user;
 	const invite_message = {
 		"text":"Welcome to the Only Once portal. Please read this on the slack client.",
 		"blocks": [
@@ -52,7 +53,7 @@ slack.event("member_joined_channel", async({client,body,say})=>{
 				"type": "section",
 				"text": {
 					"type": "mrkdwn",
-					"text": `Welcome to the Only Once portal, ${user}. From here you can access the Only Once channel.`
+					"text": `Welcome to the Only Once portal, <@${user}>. From here you can access the Only Once channel.`
 				}
 			},
 			{
@@ -69,7 +70,7 @@ slack.event("member_joined_channel", async({client,body,say})=>{
 				"type": "section",
 				"text": {
 					"type": "mrkdwn",
-					"text": "*RULES*\n\n- If you send the same message as anyone before you'll get *BANNED*.\n- The max text length is 300characters. If you use more you'll get *BANNED*. \n- If you spam random characters to abuse the system you'll get *BANNED*."
+					"text": "*RULES*\n\n- If you send the same message as anyone before you'll get *BANNED*.\n- The max text length is 300characters. If you use more you'll get *BANNED*. \n- If you spam random characters to abuse the system you'll get *BANNED*.\n- All your messages sent in #only-once will be stored in a database unencrypted and linked with your user id."
 				}
 			},
 			{
@@ -105,11 +106,14 @@ slack.event("member_joined_channel", async({client,body,say})=>{
 			}
 		]
 	}
+	
+	await client.chat.postMessage({
+		channel: ONLY_ONCE_PORTAL,
+		blocks: invite_message.blocks,
+		text: invite_message.text
+	})
 
-	slack.client.chat.postMessage({
-		channel: ONLY_ONCE_CHANNEL,
-		...invite_message
-	}).catch(console.error);
+	await slackLog(`New member joined the portal <@${user}>`);
 })
 
 
@@ -229,6 +233,9 @@ slack.action("joinonlyonce", async({client,body,ack})=>{
 })
 
 slack.command("/ooinvite", async ({ ack, body, client,respond }) => {
+
+	if (body.user_id !== OO_ADMIN) return;
+
 	await ack();
 	console.log(body);
 	const { text } = body;
@@ -259,6 +266,8 @@ slack.command("/ooinvite", async ({ ack, body, client,respond }) => {
 
 
 slack.command("/oorm", async ({ ack, body, client,respond }) => {
+	if (body.user_id !== OO_ADMIN) return;
+	
 	await ack();
 	const { text } = body;
 	const parsedUser = parseUser(text.split(" ")[0]);
