@@ -70,7 +70,7 @@ slack.event("member_joined_channel", async({client,body,say})=>{
 				"type": "section",
 				"text": {
 					"type": "mrkdwn",
-					"text": "*RULES*\n\n- If you send the same message as anyone before you'll get *BANNED*.\n- The max text length is 300characters. If you use more you'll get *BANNED*. \n- If you spam random characters to abuse the system you'll get *BANNED*.\n- All your messages sent in #only-once will be stored in a database unencrypted and linked with your user id."
+					"text": "*RULES*\n\n- If you send the same message as anyone before you'll get *BANNED*.\n- The max text length is 300characters. If you use more you'll get *BANNED*.\n- All messages get .toLowerCase()ed so different capitalizaction doesnt work! \n- If you spam random characters to abuse the system you'll get *BANNED*.\n- All your messages sent in #only-once will be stored in a database unencrypted and linked with your user id."
 				}
 			},
 			{
@@ -264,6 +264,29 @@ slack.command("/ooinvite", async ({ ack, body, client,respond }) => {
 });
 
 
+slack.command("/oounban", async ({ ack, body, client,respond,say }) => {
+	if (body.user_id !== OO_ADMIN) return;
+
+	await ack();
+	const { text } = body;
+	const parsedUser = parseUser(text.split(" ")[0]);
+
+	if (!parsedUser ) {
+		respond("You have not provided a valid user");
+		return
+	};
+
+	respond(`Unbanning ${parsedUser.name}`);
+	let u = await User.findOne({where:{id:parsedUser.id}});
+	if(!u){
+		say("User not found in database yet (they are not banned)");
+		return;
+	} 
+	u.update({banned:false});
+	await u.save().catch(slackLog);
+
+	slackLog(`Unbanned <@${parsedUser.id}>`);
+})
 
 slack.command("/oorm", async ({ ack, body, client,respond }) => {
 	if (body.user_id !== OO_ADMIN) return;
@@ -323,22 +346,22 @@ slack.message(async ({ message, client }) => {
 	const message_thread = message.thread_ts || message.ts;
 
 	if(!u) {
-		slackLog(`CRITICAL ERRROR User ${user} not found in database`);
+		slackLog(`CRITICAL ERRROR User <@${user}> not found in database`);
 		client.chat.postMessage({
 			channel: ONLY_ONCE_CHANNEL,
-			text: `CRITICAL ERRROR User ${user} not found in database`
+			text: `CRITICAL ERRROR User <@${user}> not found in database`
 		})
 		return;
 	}
 
-	let msg = await Message.findOne({where:{content:message.text}});
+	let msg = await Message.findOne({where:{content:text.toLowerCase()}});
 
 	if(msg){
 		u.update({banned:true});
-		slackLog(`User ${user} has been banned for sending the same message as someone else before.`);
+		slackLog(`User <@${user}> has been banned for sending the same message as someone else before.`);
 		client.chat.postMessage({
 			channel: ONLY_ONCE_CHANNEL,
-			text: `${user} has been banned for sending the same message as someone else before.`,
+			text: `<@${user}> has been banned for sending the same message as someone else before.`,
 			thread_ts: message_thread
 		})
 		
@@ -350,13 +373,13 @@ slack.message(async ({ message, client }) => {
 		banUser(user);
 
 	} else {
-		msg = await Message.create({ts:message.ts,userId:message.user,content:message.text});
+		msg = await Message.create({ts:message.ts,userId:message.user,content:text.toLowerCase()});
 		msg.save().catch(slackLog);
 
 		if(text.length > 300){
 			client.chat.postMessage({
 				channel: ONLY_ONCE_CHANNEL,
-				text: `${user} has been banned for exceeding the 300 character limit!!! Good Game.`,
+				text: `<@${user}> has been banned for exceeding the 300 character limit!!! Good Game.`,
 				thread_ts: message.ts
 			})
 
