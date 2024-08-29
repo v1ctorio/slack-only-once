@@ -20,4 +20,4 @@ jobs:
             export PATH=/nix/var/nix/profiles/default/bin:$PATH
             cd /home/vic/slack-only-once
             git pull
-            systemctl restart OnlyOnce.service
+            systemctl --user restart OnlyOnce.service
